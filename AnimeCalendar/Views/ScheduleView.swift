@@ -12,6 +12,7 @@ struct ScheduleView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // 星期选择器
                 Picker("选择日期", selection: $selectedDayIndex) {
                     ForEach(viewModel.dayNames.indices, id: \.self) { index in
                         Text(viewModel.dayNames[index]).tag(index)
@@ -19,10 +20,11 @@ struct ScheduleView: View {
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal)
-                .padding(.vertical, 8)
+                .padding(.vertical, 10)
 
                 Divider()
 
+                // 主内容区
                 if viewModel.isLoading && viewModel.scheduleByDay.isEmpty {
                     Spacer()
                     ProgressView("加载中...")
@@ -56,8 +58,10 @@ struct ScheduleView: View {
                         Spacer()
                     } else {
                         List(animeList) { anime in
-                            AnimeRowView(anime: anime)
-                                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                            NavigationLink(destination: AnimeDetailView(anime: anime)) {
+                                AnimeRowView(anime: anime)
+                            }
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                         }
                         .listStyle(.plain)
                         .refreshable {

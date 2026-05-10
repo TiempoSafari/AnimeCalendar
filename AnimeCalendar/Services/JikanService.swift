@@ -41,4 +41,20 @@ actor JikanService {
             throw JikanError.decodingError(error)
         }
     }
+
+    func fetchAnimeDetail(id: Int) async throws -> Anime {
+        guard let url = URL(string: "\(baseURL)/anime/\(id)") else {
+            throw JikanError.invalidURL
+        }
+        let (data, response) = try await URLSession.shared.data(from: url)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw JikanError.httpError(http.statusCode)
+        }
+        struct SingleResponse: Codable { let data: Anime }
+        do {
+            return try decoder.decode(SingleResponse.self, from: data).data
+        } catch {
+            throw JikanError.decodingError(error)
+        }
+    }
 }

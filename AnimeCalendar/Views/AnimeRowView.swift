@@ -10,10 +10,11 @@ struct AnimeRowView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
+            // 封面图
             AsyncImage(url: anime.thumbnailURL) { phase in
                 switch phase {
                 case .empty:
-                    RoundedRectangle(cornerRadius: 6)
+                    RoundedRectangle(cornerRadius: 8)
                         .fill(Color(.systemGray5))
                         .overlay(ProgressView())
                 case .success(let image):
@@ -21,7 +22,7 @@ struct AnimeRowView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                 case .failure:
-                    RoundedRectangle(cornerRadius: 6)
+                    RoundedRectangle(cornerRadius: 8)
                         .fill(Color(.systemGray5))
                         .overlay(
                             Image(systemName: "photo")
@@ -32,13 +33,17 @@ struct AnimeRowView: View {
                 }
             }
             .frame(width: 60, height: 85)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(anime.title)
+            // 信息区
+            VStack(alignment: .leading, spacing: 5) {
+                // 英文标题（主标题）
+                Text(anime.displayTitle)
                     .font(.headline)
                     .lineLimit(2)
+                    .foregroundStyle(.primary)
 
+                // 日文标题（副标题）
                 if let japanese = anime.titleJapanese, !japanese.isEmpty {
                     Text(japanese)
                         .font(.caption)
@@ -46,13 +51,15 @@ struct AnimeRowView: View {
                         .lineLimit(1)
                 }
 
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
+                    // 播出时间
                     let broadcastTime = anime.localBroadcastTime
                     if broadcastTime != "时间未知" {
                         Label(broadcastTime, systemImage: "clock")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    // 评分
                     if let score = anime.score, score > 0 {
                         Label(String(format: "%.1f", score), systemImage: "star.fill")
                             .font(.caption)
@@ -60,12 +67,13 @@ struct AnimeRowView: View {
                     }
                 }
 
-                if let episodes = anime.episodes {
-                    Text("全\(episodes)集")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                // 集数状态（蓝色强调）
+                Text(anime.episodeDisplay)
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.blue)
 
+                // 类型标签
                 if let genres = anime.genres, !genres.isEmpty {
                     Text(genres.prefix(3).map(\.name).joined(separator: " · "))
                         .font(.caption2)
@@ -82,15 +90,25 @@ struct AnimeRowView: View {
 
 #Preview {
     AnimeRowView(anime: Anime(
-        malId: 1,
-        title: "鬼灭之刃",
-        titleJapanese: "鬼滅の刃",
-        episodes: 26,
-        score: 8.7,
+        malId: 52991,
+        title: "Sousou no Frieren",
+        titleJapanese: "葬送のフリーレン",
+        titles: [
+            AnimeTitle(type: "English", title: "Frieren: Beyond Journey's End"),
+            AnimeTitle(type: "Japanese", title: "葬送のフリーレン")
+        ],
+        episodes: 28,
+        score: 9.3,
         images: AnimeImages(jpg: AnimeImage(imageUrl: nil, largeImageUrl: nil)),
-        broadcast: Broadcast(day: "Sundays", time: "23:15", timezone: "Asia/Tokyo"),
-        genres: [Genre(malId: 1, name: "Action"), Genre(malId: 2, name: "Fantasy")],
-        studios: [Studio(malId: 1, name: "ufotable")]
+        broadcast: Broadcast(day: "Fridays", time: "23:00", timezone: "Asia/Tokyo"),
+        genres: [Genre(malId: 1, name: "Adventure"), Genre(malId: 2, name: "Drama")],
+        studios: [Studio(malId: 1, name: "Madhouse")],
+        synopsis: nil,
+        aired: AiredDate(from: "2023-09-29T00:00:00+00:00", to: nil),
+        duration: "24 min per ep",
+        airing: false,
+        type: "TV",
+        year: 2023
     ))
     .padding()
 }
