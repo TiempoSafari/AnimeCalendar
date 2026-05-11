@@ -29,6 +29,14 @@ actor TMDBService {
     private let baseURL = "https://api.themoviedb.org/3"
     private let decoder = JSONDecoder()
 
+    /// 15 秒请求超时，避免因网络较慢时长时间卡在加载中
+    private let session: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.timeoutIntervalForRequest  = 15
+        cfg.timeoutIntervalForResource = 30
+        return URLSession(configuration: cfg)
+    }()
+
     /// 获取正在播出的日本动画（分页，language=zh-CN）
     func fetchAiringAnime(page: Int = 1) async throws -> [Anime] {
         var comps = URLComponents(string: "\(baseURL)/discover/tv")!
@@ -42,7 +50,7 @@ actor TMDBService {
             .init(name: "page",               value: "\(page)"),
         ]
         guard let url = comps.url else { throw TMDBError.invalidURL }
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw TMDBError.httpError(http.statusCode)
         }
@@ -61,7 +69,7 @@ actor TMDBService {
             .init(name: "language", value: "zh-CN"),
         ]
         guard let url = comps.url else { throw TMDBError.invalidURL }
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw TMDBError.httpError(http.statusCode)
         }

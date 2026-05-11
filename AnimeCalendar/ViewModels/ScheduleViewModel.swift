@@ -29,14 +29,14 @@ class ScheduleViewModel {
 
     // MARK: - Data loading
 
-    /// 拉取 3 页当季正在播出的日本动画，按播出星期分组。
+    /// 拉取 2 页当季正在播出的日本动画（约 40 部），按播出星期分组。
     /// 出错时静默忽略（用于下拉刷新）。
     func loadAllSchedules() async {
         isLoading = true
         errorMessage = nil
         var all: [Anime] = []
         await withTaskGroup(of: [Anime].self) { group in
-            for page in 1...3 {
+            for page in 1...2 {
                 group.addTask {
                     (try? await TMDBService.shared.fetchAiringAnime(page: page)) ?? []
                 }
@@ -54,7 +54,7 @@ class ScheduleViewModel {
         var all: [Anime] = []
         var firstError: String?
         await withTaskGroup(of: Result<[Anime], Error>.self) { group in
-            for page in 1...3 {
+            for page in 1...2 {
                 group.addTask {
                     do {
                         return .success(try await TMDBService.shared.fetchAiringAnime(page: page))
