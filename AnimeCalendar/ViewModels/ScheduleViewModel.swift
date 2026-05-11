@@ -8,86 +8,64 @@ import Observation
 
 @Observable
 class ScheduleViewModel {
-    /// 按星期分组：0=周一, 1=周二, ..., 6=周日
-    var scheduleByDay: [Int: [Anime]] = [:]
+    /// Cache keyed by the start-of-day Date
+    private(set) var dailyCache: [Date: [AiringEntry]] = [:]
+
     var isLoading = false
     var errorMessage: String?
 
-    let dayNames = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    /// Which weekday indices (0=Mon…6=Sun) have at least one cached entry
+    var daysWithAnime: Set<Int> {
+        var result = Set<Int>()
+        for (date, entries) in dailyCache where !entries.isEmpty {
+            let wd = Calendar.current.component(.weekday, from: date)
+            result.insert((wd + 5) % 7)
+        }
+        return result
+    }
+
+    // MARK: - Queries
+
+    func entries(for date: Date) -> [AiringEntry] {
+        dailyCache[startOfDay(date)] ?? []
+    }
+
+    func isLoaded(for date: Date) -> Bool {
+        dailyCache[startOfDay(date)] != nil
+    }
+
+    /// Load schedule for `date`, skipping if already cached.
+    func loadDay(_ date: Date) async {
+        let key = startOfDay(date)
+        guard dailyCache[key] == nil else { return }
+        isLoading = true
+        errorMessage = nil
+        do {
+            let entries = try await AniListService.shared.fetchSchedule(for: date)
+            dailyCache[key] = entries
+        } catch {
+            errorMessage = (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription
+            dailyCache[key] = []
+        }
+        isLoading = false
+    }
+
+    /// Force-refresh `date` even if already cached.
+    func forceReload(_ date: Date) async {
+        let key = startOfDay(date)
+        dailyCache.removeValue(forKey: key)
+        await loadDay(date)
+    }
 
     // MARK: - Helpers
 
-    /// 今天对应的 index（0=周一, 6=周日）
     func todayIndex() -> Int {
-        let weekday = Calendar.current.component(.weekday, from: Date())
-        return (weekday + 5) % 7
+        let wd = Calendar.current.component(.weekday, from: Date())
+        return (wd + 5) % 7
     }
 
-    func animeForDay(at index: Int) -> [Anime] {
-        scheduleByDay[index] ?? []
-    }
-
-    // MARK: - Data loading
-
-    /// 拉取 2 页当季正在播出的日本动画（约 40 部），按播出星期分组。
-    /// 出错时静默忽略（用于下拉刷新）。
-    func loadAllSchedules() async {
-        isLoading = true
-        errorMessage = nil
-        var all: [Anime] = []
-        await withTaskGroup(of: [Anime].self) { group in
-            for page in 1...2 {
-                group.addTask {
-                    (try? await TMDBService.shared.fetchAiringAnime(page: page)) ?? []
-                }
-            }
-            for await shows in group { all.append(contentsOf: shows) }
-        }
-        scheduleByDay = groupByDay(all)
-        isLoading = false
-    }
-
-    /// 拉取并上报第一个错误（用于初始加载）。
-    func loadAllSchedulesWithErrorHandling() async {
-        isLoading = true
-        errorMessage = nil
-        var all: [Anime] = []
-        var firstError: String?
-        await withTaskGroup(of: Result<[Anime], Error>.self) { group in
-            for page in 1...2 {
-                group.addTask {
-                    do {
-                        return .success(try await TMDBService.shared.fetchAiringAnime(page: page))
-                    } catch {
-                        return .failure(error)
-                    }
-                }
-            }
-            for await result in group {
-                switch result {
-                case .success(let shows):
-                    all.append(contentsOf: shows)
-                case .failure(let error):
-                    if firstError == nil {
-                        firstError = (error as? LocalizedError)?.errorDescription
-                            ?? error.localizedDescription
-                    }
-                }
-            }
-        }
-        scheduleByDay = groupByDay(all)
-        errorMessage = all.isEmpty ? firstError : nil
-        isLoading = false
-    }
-
-    // MARK: - Private
-
-    private func groupByDay(_ shows: [Anime]) -> [Int: [Anime]] {
-        var result: [Int: [Anime]] = [:]
-        for show in shows {
-            guard let day = show.broadcastDayIndex else { continue }
-            result[day, default: []].append(show)
-        }
-        return result
+    private func startOfDay(_ date: Date) -> Date {
+        Calendar.current.startOfDay(for: date)
     }
 }

@@ -6,12 +6,12 @@
 import SwiftUI
 
 struct AnimeDetailView: View {
-    let anime: Anime
+    let entry: AiringEntry
 
-    @State private var fullAnime: Anime?
+    @State private var fullMedia: AniListMedia?
     @State private var isLoadingDetail = false
 
-    private var displayAnime: Anime { fullAnime ?? anime }
+    private var media: AniListMedia { fullMedia ?? entry.media }
 
     var body: some View {
         ScrollView {
@@ -22,7 +22,7 @@ struct AnimeDetailView: View {
                     actionButtonsRow
                     statsCardsRow
 
-                    if isLoadingDetail && fullAnime == nil {
+                    if isLoadingDetail && fullMedia == nil {
                         HStack {
                             ProgressView().padding(.trailing, 6)
                             Text("加载详情中...")
@@ -33,15 +33,11 @@ struct AnimeDetailView: View {
                         .padding(.vertical, 8)
                     }
 
-                    if let net = displayAnime.networkNames {
-                        infoCard(icon: "play.tv", title: "播出平台", content: net)
-                    }
-
-                    if let studio = displayAnime.studioNames {
+                    if let studio = media.studioNames {
                         infoCard(icon: "building.2", title: "制作公司", content: studio)
                     }
 
-                    if let synopsis = displayAnime.cleanSynopsis, !synopsis.isEmpty {
+                    if let synopsis = media.cleanSynopsis, !synopsis.isEmpty {
                         synopsisCard(synopsis: synopsis)
                     }
                 }
@@ -54,7 +50,7 @@ struct AnimeDetailView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .task {
             isLoadingDetail = true
-            fullAnime = try? await TMDBService.shared.fetchShowDetail(id: anime.id)
+            fullMedia = try? await AniListService.shared.fetchMediaDetail(id: entry.media.id)
             isLoadingDetail = false
         }
     }
@@ -64,7 +60,9 @@ struct AnimeDetailView: View {
     @ViewBuilder
     private var heroSection: some View {
         ZStack(alignment: .bottomLeading) {
-            AsyncImage(url: displayAnime.largeThumbnailURL ?? displayAnime.thumbnailURL) { phase in
+            let imageURL = media.bannerURL ?? media.coverURL
+
+            AsyncImage(url: imageURL) { phase in
                 switch phase {
                 case .success(let image):
                     image.resizable().aspectRatio(contentMode: .fill)
@@ -100,39 +98,34 @@ struct AnimeDetailView: View {
             .frame(height: 420)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(displayAnime.displayTitle)
+                Text(media.displayTitle)
                     .font(.system(size: 28, weight: .bold))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
 
-                if let japanese = displayAnime.titleJapanese,
-                   !japanese.isEmpty, japanese != displayAnime.displayTitle {
-                    Text(japanese)
+                if let native = media.nativeTitle,
+                   !native.isEmpty, native != media.displayTitle {
+                    Text(native)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
 
                 HStack(spacing: 5) {
-                    if let year = displayAnime.year {
+                    if let year = media.seasonYear {
                         Text("\(String(year))年")
                     }
-                    Text("·")
-                    if displayAnime.airing == true {
-                        Text("连载中").foregroundStyle(.green)
-                    } else {
-                        Text("已完结")
-                    }
-                    if let seasons = displayAnime.numberOfSeasons, seasons > 1 {
+                    if let status = media.status {
                         Text("·")
-                        Text("\(seasons) 季")
+                        Text(localizedStatus(status))
+                            .foregroundStyle(status == "RELEASING" ? .green : .secondary)
                     }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-                if !displayAnime.genreNames.isEmpty {
-                    Text(displayAnime.genreNames.prefix(4).joined(separator: "，"))
+                if !media.genreNames.isEmpty {
+                    Text(media.genreNames.prefix(4).joined(separator: "，"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -147,10 +140,10 @@ struct AnimeDetailView: View {
     @ViewBuilder
     private var actionButtonsRow: some View {
         HStack(spacing: 0) {
-            circleActionButton(icon: "safari",                label: "探索")
-            circleActionButton(icon: "square.and.arrow.up",   label: "分享")
-            circleActionButton(icon: "heart",                 label: "收藏")
-            circleActionButton(icon: "ellipsis",              label: "更多")
+            circleActionButton(icon: "safari",               label: "探索")
+            circleActionButton(icon: "square.and.arrow.up",  label: "分享")
+            circleActionButton(icon: "heart",                label: "收藏")
+            circleActionButton(icon: "ellipsis",             label: "更多")
         }
         .padding(.top, 4)
     }
@@ -178,35 +171,33 @@ struct AnimeDetailView: View {
     @ViewBuilder
     private var statsCardsRow: some View {
         HStack(spacing: 12) {
-            if let score = displayAnime.score, score > 0 {
+            if let score = media.score {
                 AnimeStatCard(
                     icon: "star.fill", iconColor: .blue,
                     value: String(format: "%.1f", score),
-                    label: "TMDB 评分"
+                    label: "AniList 评分"
                 )
             }
 
             AnimeStatCard(
-                icon: "play.rectangle.fill", iconColor: .blue,
-                value: displayAnime.episodeShortDisplay,
-                label: displayAnime.episodeShortLabel
+                icon: "clock.fill", iconColor: .blue,
+                value: entry.localTimeString,
+                label: "播出时间"
             )
 
-            // 优先显示下集日期，其次时长
-            if let nextDate = displayAnime.nextEpisodeDateText {
-                AnimeStatCard(
-                    icon: "calendar.badge.clock", iconColor: .blue,
-                    value: nextDate,
-                    label: "下集播出"
-                )
-            } else if let duration = displayAnime.durationText {
-                AnimeStatCard(
-                    icon: "clock.fill", iconColor: .blue,
-                    value: duration,
-                    label: "每集时长"
-                )
-            }
+            AnimeStatCard(
+                icon: "play.rectangle.fill", iconColor: .blue,
+                value: "第\(entry.episode)集",
+                label: episodeLabel
+            )
         }
+    }
+
+    private var episodeLabel: String {
+        if let total = media.episodes, total > 0 {
+            return "共\(total)集"
+        }
+        return "本次更新"
     }
 
     // MARK: - Info Cards
@@ -236,6 +227,17 @@ struct AnimeDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func localizedStatus(_ status: String) -> String {
+        switch status {
+        case "RELEASING":    return "连载中"
+        case "FINISHED":     return "已完结"
+        case "NOT_YET_AIRED": return "未开播"
+        case "CANCELLED":    return "已取消"
+        case "HIATUS":       return "暂停更新"
+        default:             return status
+        }
     }
 }
 
@@ -270,26 +272,26 @@ struct AnimeStatCard: View {
 
 #Preview {
     NavigationStack {
-        AnimeDetailView(anime: Anime(
-            id: 209867,
-            name: "葬送的芙莉莲",
-            originalName: "葬送のフリーレン",
-            overview: "打倒魔王的勇者一行人，踏上了回归故乡的旅程。在旅途中精灵魔法师芙莉莲和勇者辉美，在旅程终点的王都里，和彼此相知相惜",
-            posterPath: nil,
-            backdropPath: nil,
-            voteAverage: 8.7,
-            firstAirDate: "2023-09-29",
-            genreIds: nil,
-            genres: [TMDBGenre(id: 16, name: "动画"), TMDBGenre(id: 18, name: "剧情")],
-            status: "Ended",
-            inProduction: false,
-            numberOfEpisodes: 28,
-            numberOfSeasons: 1,
-            nextEpisodeToAir: nil,
-            lastEpisodeToAir: TMDBEpisode(id: 1, episodeNumber: 28, seasonNumber: 1, airDate: "2024-03-22"),
-            networks: [TMDBNetwork(id: 1, name: "NTV", logoPath: nil)],
-            productionCompanies: [TMDBProductionCompany(id: 1, name: "Madhouse")],
-            episodeRunTime: [24]
+        AnimeDetailView(entry: AiringEntry(
+            id: 1,
+            airingAt: Int(Date().timeIntervalSince1970),
+            episode: 5,
+            media: AniListMedia(
+                id: 21,
+                title: AniListTitle(romaji: "Frieren: Beyond Journey's End", native: "葬送のフリーレン", english: nil),
+                description: "打倒魔王的勇者一行人，踏上了回归故乡的旅程。在旅途中精灵魔法师芙莉莲和勇者辉美……",
+                coverImage: AniListCoverImage(large: nil, medium: nil),
+                bannerImage: nil,
+                episodes: 28,
+                status: "FINISHED",
+                genres: ["Adventure", "Drama", "Fantasy"],
+                averageScore: 87,
+                seasonYear: 2023,
+                synonyms: ["葬送的芙莉莲"],
+                isAdult: false,
+                studios: AniListStudios(nodes: [AniListStudio(name: "Madhouse")]),
+                nextAiringEpisode: nil
+            )
         ))
     }
 }

@@ -9,21 +9,20 @@ struct ScheduleView: View {
     @State private var viewModel = ScheduleViewModel()
     @State private var selectedDate = Date()
 
-    // 将所选日期映射为 0=周一…6=周日
+    private var selectedDayKey: Date {
+        Calendar.current.startOfDay(for: selectedDate)
+    }
+
     private var selectedDayIndex: Int {
         let wd = Calendar.current.component(.weekday, from: selectedDate)
         return (wd + 5) % 7
     }
 
-    private var animeList: [Anime] {
-        viewModel.animeForDay(at: selectedDayIndex)
+    private var entryList: [AiringEntry] {
+        viewModel.entries(for: selectedDate)
     }
 
-    private var daysWithAnime: Set<Int> {
-        Set(viewModel.scheduleByDay.keys.filter {
-            !(viewModel.scheduleByDay[$0]?.isEmpty ?? true)
-        })
-    }
+    private var daysWithAnime: Set<Int> { viewModel.daysWithAnime }
 
     private var dayHeaderText: String {
         let fmt = DateFormatter()
@@ -40,7 +39,6 @@ struct ScheduleView: View {
                     Section {
                         contentSection
                     } header: {
-                        // 吸顶日历卡片
                         CalendarView(
                             selectedDate: $selectedDate,
                             daysWithAnime: daysWithAnime
@@ -54,18 +52,18 @@ struct ScheduleView: View {
                         .padding(.horizontal, 16)
                         .padding(.top, 10)
                         .padding(.bottom, 6)
-                        .background(Color(.systemBackground))  // 滚动时遮住下层内容
+                        .background(Color(.systemBackground))
                     }
                 }
             }
             .refreshable {
-                await viewModel.loadAllSchedules()
+                await viewModel.forceReload(selectedDate)
             }
             .navigationTitle("番剧时间表")
             .navigationBarTitleDisplayMode(.inline)
         }
-        .task {
-            await viewModel.loadAllSchedulesWithErrorHandling()
+        .task(id: selectedDayKey) {
+            await viewModel.loadDay(selectedDate)
         }
     }
 
@@ -73,14 +71,13 @@ struct ScheduleView: View {
 
     @ViewBuilder
     private var contentSection: some View {
-        // 日期 + 数量标题行
         HStack {
             Text(dayHeaderText)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             Spacer()
-            if !animeList.isEmpty {
-                Text("\(animeList.count) 部")
+            if !entryList.isEmpty {
+                Text("\(entryList.count) 部")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -89,21 +86,20 @@ struct ScheduleView: View {
         .padding(.top, 14)
         .padding(.bottom, 6)
 
-        // 状态分支
-        if viewModel.isLoading && viewModel.scheduleByDay.isEmpty {
+        if viewModel.isLoading && !viewModel.isLoaded(for: selectedDate) {
             ProgressView("加载中…")
                 .frame(maxWidth: .infinity)
                 .padding(48)
 
-        } else if let error = viewModel.errorMessage, viewModel.scheduleByDay.isEmpty {
+        } else if let error = viewModel.errorMessage, entryList.isEmpty {
             errorView(message: error)
 
-        } else if animeList.isEmpty && !viewModel.isLoading {
+        } else if entryList.isEmpty && viewModel.isLoaded(for: selectedDate) {
             VStack(spacing: 12) {
                 Image(systemName: "tv.slash")
                     .font(.system(size: 40))
                     .foregroundStyle(.secondary)
-                Text("该日暂无番剧播出")
+                Text("该日暂无番剧更新")
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity)
@@ -119,17 +115,17 @@ struct ScheduleView: View {
     @ViewBuilder
     private var animeListRows: some View {
         VStack(spacing: 0) {
-            ForEach(animeList) { anime in
-                NavigationLink(destination: AnimeDetailView(anime: anime)) {
-                    AnimeRowView(anime: anime)
+            ForEach(entryList) { entry in
+                NavigationLink(destination: AnimeDetailView(entry: entry)) {
+                    AnimeRowView(entry: entry)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 2)
                 }
                 .buttonStyle(.plain)
 
-                if anime.id != animeList.last?.id {
+                if entry.id != entryList.last?.id {
                     Divider()
-                        .padding(.leading, 88)   // 缩进，跳过封面图宽度
+                        .padding(.leading, 136)
                         .padding(.trailing, 16)
                 }
             }
@@ -149,7 +145,7 @@ struct ScheduleView: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             Button("重试") {
-                Task { await viewModel.loadAllSchedulesWithErrorHandling() }
+                Task { await viewModel.forceReload(selectedDate) }
             }
             .buttonStyle(.borderedProminent)
         }
