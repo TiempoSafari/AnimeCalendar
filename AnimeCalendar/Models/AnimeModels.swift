@@ -1,176 +1,214 @@
 //
 //  AnimeModels.swift
 //  AnimeCalendar
+//  TMDB-based data models
 //
 
 import Foundation
 
-struct AnimeTitle: Codable {
-    let type: String
-    let title: String
+// MARK: - Supporting types
+
+struct TMDBGenre: Codable, Identifiable {
+    let id: Int
+    let name: String
 }
 
-struct AnimeImage: Codable {
-    let imageUrl: String?
-    let largeImageUrl: String?
+struct TMDBNetwork: Codable, Identifiable {
+    let id: Int
+    let name: String
+    let logoPath: String?
 
     enum CodingKeys: String, CodingKey {
-        case imageUrl = "image_url"
-        case largeImageUrl = "large_image_url"
+        case id, name
+        case logoPath = "logo_path"
     }
 }
 
-struct AnimeImages: Codable {
-    let jpg: AnimeImage?
-}
-
-struct Broadcast: Codable {
-    let day: String?
-    let time: String?
-    let timezone: String?
-}
-
-struct AiredDate: Codable {
-    let from: String?
-    let to: String?
-}
-
-struct Genre: Codable, Identifiable {
-    let malId: Int
+struct TMDBProductionCompany: Codable, Identifiable {
+    let id: Int
     let name: String
 
     enum CodingKeys: String, CodingKey {
-        case malId = "mal_id"
-        case name
+        case id, name
     }
-
-    var id: Int { malId }
 }
 
-struct Studio: Codable, Identifiable {
-    let malId: Int
-    let name: String
+struct TMDBEpisode: Codable {
+    let id: Int?
+    let episodeNumber: Int?
+    let seasonNumber: Int?
+    let airDate: String?
 
     enum CodingKeys: String, CodingKey {
-        case malId = "mal_id"
-        case name
+        case id
+        case episodeNumber = "episode_number"
+        case seasonNumber = "season_number"
+        case airDate = "air_date"
     }
-
-    var id: Int { malId }
 }
 
+// MARK: - Main model
+
+/// 统一使用 TMDB 作为数据源，language=zh-CN 返回中文标题和简介
 struct Anime: Codable, Identifiable {
-    let malId: Int
-    let title: String
-    let titleJapanese: String?
-    let titles: [AnimeTitle]?
-    let episodes: Int?
-    let score: Double?
-    let images: AnimeImages?
-    let broadcast: Broadcast?
-    let genres: [Genre]?
-    let studios: [Studio]?
-    let synopsis: String?
-    let aired: AiredDate?
-    let duration: String?
-    let airing: Bool?
-    let type: String?
-    let year: Int?
+    // 基础字段（列表和详情均有）
+    let id: Int
+    let name: String              // 中文标题
+    let originalName: String?     // 日文原名
+    let overview: String?         // 中文简介
+    let posterPath: String?
+    let backdropPath: String?
+    let voteAverage: Double?
+    let firstAirDate: String?     // "YYYY-MM-DD"
+
+    // 列表响应字段
+    let genreIds: [Int]?
+
+    // 详情响应字段（列表中为 nil）
+    let genres: [TMDBGenre]?
+    let status: String?
+    let inProduction: Bool?
+    let numberOfEpisodes: Int?
+    let numberOfSeasons: Int?
+    let nextEpisodeToAir: TMDBEpisode?
+    let lastEpisodeToAir: TMDBEpisode?
+    let networks: [TMDBNetwork]?
+    let productionCompanies: [TMDBProductionCompany]?
+    let episodeRunTime: [Int]?
 
     enum CodingKeys: String, CodingKey {
-        case malId = "mal_id"
-        case title
-        case titleJapanese = "title_japanese"
-        case titles, episodes, score, images, broadcast, genres, studios
-        case synopsis, aired, duration, airing, type, year
+        case id, name, overview, status, networks, genres
+        case originalName = "original_name"
+        case posterPath = "poster_path"
+        case backdropPath = "backdrop_path"
+        case voteAverage = "vote_average"
+        case firstAirDate = "first_air_date"
+        case genreIds = "genre_ids"
+        case inProduction = "in_production"
+        case numberOfEpisodes = "number_of_episodes"
+        case numberOfSeasons = "number_of_seasons"
+        case nextEpisodeToAir = "next_episode_to_air"
+        case lastEpisodeToAir = "last_episode_to_air"
+        case productionCompanies = "production_companies"
+        case episodeRunTime = "episode_run_time"
     }
 
-    var id: Int { malId }
+    // MARK: - 视图兼容的计算属性
 
-    // MARK: - Display helpers
-
-    /// 优先英文标题，其次默认标题（罗马音）
-    var displayTitle: String {
-        titles?.first(where: { $0.type == "English" })?.title ?? title
-    }
+    var displayTitle: String { name }
+    var titleJapanese: String? { originalName }
+    var score: Double? { voteAverage }
+    var airing: Bool? { inProduction }
 
     var thumbnailURL: URL? {
-        guard let str = images?.jpg?.imageUrl, !str.isEmpty else { return nil }
-        return URL(string: str)
+        guard let path = posterPath else { return nil }
+        return URL(string: "https://image.tmdb.org/t/p/w500\(path)")
     }
 
     var largeThumbnailURL: URL? {
-        guard let str = images?.jpg?.largeImageUrl ?? images?.jpg?.imageUrl, !str.isEmpty else { return nil }
-        return URL(string: str)
+        if let path = backdropPath {
+            return URL(string: "https://image.tmdb.org/t/p/original\(path)")
+        }
+        if let path = posterPath {
+            return URL(string: "https://image.tmdb.org/t/p/w780\(path)")
+        }
+        return nil
     }
 
-    /// 将播出时间从源时区转换为本地时区（HH:mm）
-    var localBroadcastTime: String {
-        guard let time = broadcast?.time,
-              let tz = broadcast?.timezone,
-              let zone = TimeZone(identifier: tz) else { return "时间未知" }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        formatter.timeZone = zone
-        guard let date = formatter.date(from: time) else { return time }
-        formatter.timeZone = .current
-        return formatter.string(from: date)
+    var year: Int? {
+        guard let d = firstAirDate, d.count >= 4 else { return nil }
+        return Int(d.prefix(4))
     }
 
-    /// 根据开播日期估算当前已播集数（假设每周一集）
-    var estimatedCurrentEpisode: Int? {
-        guard let fromStr = aired?.from else { return nil }
-        let f1 = ISO8601DateFormatter()
-        f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let f2 = ISO8601DateFormatter()
-        f2.formatOptions = [.withInternetDateTime]
-        guard let startDate = f1.date(from: fromStr) ?? f2.date(from: fromStr),
-              startDate <= Date() else { return nil }
-        let weeks = Calendar.current.dateComponents([.weekOfYear], from: startDate, to: Date()).weekOfYear ?? 0
-        let estimated = weeks + 1
-        if let total = episodes { return min(estimated, total) }
-        return estimated
+    var genreNames: [String] {
+        genres?.map(\.name) ?? []
     }
 
-    /// 集数状态描述（如"更新至 12/24 集"或"全 24 集"）
+    /// 根据 nextEpisode / lastEpisode / firstAirDate 推算播出星期几（0=周一, 6=周日）
+    var broadcastDayIndex: Int? {
+        let dateStr = nextEpisodeToAir?.airDate
+            ?? lastEpisodeToAir?.airDate
+            ?? firstAirDate
+        guard let dateStr else { return nil }
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        guard let date = fmt.date(from: dateStr) else { return nil }
+        let weekday = Calendar.current.component(.weekday, from: date)
+        return (weekday + 5) % 7   // 1=Sun→6, 2=Mon→0, ..., 7=Sat→5
+    }
+
+    var currentEpisodeNumber: Int? { lastEpisodeToAir?.episodeNumber }
+
     var episodeDisplay: String {
-        if airing == true {
-            if let current = estimatedCurrentEpisode {
-                if let total = episodes { return "更新至 \(current)/\(total) 集" }
+        if inProduction == true {
+            if let current = currentEpisodeNumber {
+                if let total = numberOfEpisodes, total > 0 {
+                    return "更新至 \(current)/\(total) 集"
+                }
                 return "已更新 \(current) 集"
             }
             return "连载中"
-        } else if let total = episodes {
+        } else if let total = numberOfEpisodes, total > 0 {
             return "全 \(total) 集"
         }
         return "集数未知"
     }
 
-    /// 简短集数文字（用于详情页统计卡片）
     var episodeShortDisplay: String {
-        if airing == true, let current = estimatedCurrentEpisode {
-            return "\(current)"
-        }
-        if let total = episodes { return "\(total)" }
+        if inProduction == true, let current = currentEpisodeNumber { return "\(current)" }
+        if let total = numberOfEpisodes, total > 0 { return "\(total)" }
         return "?"
     }
 
     var episodeShortLabel: String {
-        if airing == true, let current = estimatedCurrentEpisode {
-            if let total = episodes { return "已更\(current)/共\(total)集" }
+        if inProduction == true, let current = currentEpisodeNumber {
+            if let total = numberOfEpisodes, total > 0 { return "已更\(current)/共\(total)集" }
             return "已更新集数"
         }
         return "集数"
     }
 
-    /// 去除 MAL 来源标注的简介
     var cleanSynopsis: String? {
-        synopsis?
-            .replacingOccurrences(of: "\n\n[Written by MAL Rewrite]", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = overview?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return text.isEmpty ? nil : text
+    }
+
+    /// 下集播出日期文本，如"5月15日"
+    var nextEpisodeDateText: String? {
+        guard let dateStr = nextEpisodeToAir?.airDate else { return nil }
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        guard let date = fmt.date(from: dateStr) else { return nil }
+        let display = DateFormatter()
+        display.dateFormat = "M月d日"
+        return display.string(from: date)
+    }
+
+    var networkNames: String? {
+        let names = networks?.map(\.name) ?? []
+        return names.isEmpty ? nil : names.joined(separator: "  ·  ")
+    }
+
+    var studioNames: String? {
+        let names = productionCompanies?.map(\.name) ?? []
+        return names.isEmpty ? nil : names.joined(separator: "  ·  ")
+    }
+
+    var durationText: String? {
+        guard let rt = episodeRunTime?.first, rt > 0 else { return nil }
+        return "\(rt) 分钟"
     }
 }
 
-struct ScheduleResponse: Codable {
-    let data: [Anime]
+// MARK: - API response wrapper
+
+struct TMDBDiscoverResponse: Codable {
+    let page: Int
+    let results: [Anime]
+    let totalPages: Int
+
+    enum CodingKeys: String, CodingKey {
+        case page, results
+        case totalPages = "total_pages"
+    }
 }

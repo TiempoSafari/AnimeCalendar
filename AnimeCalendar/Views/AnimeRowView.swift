@@ -37,14 +37,15 @@ struct AnimeRowView: View {
 
             // 信息区
             VStack(alignment: .leading, spacing: 5) {
-                // 英文标题（主标题）
+                // 中文标题（主）
                 Text(anime.displayTitle)
                     .font(.headline)
                     .lineLimit(2)
                     .foregroundStyle(.primary)
 
-                // 日文标题（副标题）
-                if let japanese = anime.titleJapanese, !japanese.isEmpty {
+                // 日文原名（副）
+                if let japanese = anime.titleJapanese, !japanese.isEmpty,
+                   japanese != anime.displayTitle {
                     Text(japanese)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -52,18 +53,17 @@ struct AnimeRowView: View {
                 }
 
                 HStack(spacing: 10) {
-                    // 播出时间
-                    let broadcastTime = anime.localBroadcastTime
-                    if broadcastTime != "时间未知" {
-                        Label(broadcastTime, systemImage: "clock")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
                     // 评分
                     if let score = anime.score, score > 0 {
                         Label(String(format: "%.1f", score), systemImage: "star.fill")
                             .font(.caption)
                             .foregroundStyle(.orange)
+                    }
+                    // 下集日期（详情拉取后才有）
+                    if let nextDate = anime.nextEpisodeDateText {
+                        Label(nextDate, systemImage: "calendar")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -74,8 +74,8 @@ struct AnimeRowView: View {
                     .foregroundStyle(.blue)
 
                 // 类型标签
-                if let genres = anime.genres, !genres.isEmpty {
-                    Text(genres.prefix(3).map(\.name).joined(separator: " · "))
+                if !anime.genreNames.isEmpty {
+                    Text(anime.genreNames.prefix(3).joined(separator: " · "))
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
@@ -90,25 +90,25 @@ struct AnimeRowView: View {
 
 #Preview {
     AnimeRowView(anime: Anime(
-        malId: 52991,
-        title: "Sousou no Frieren",
-        titleJapanese: "葬送のフリーレン",
-        titles: [
-            AnimeTitle(type: "English", title: "Frieren: Beyond Journey's End"),
-            AnimeTitle(type: "Japanese", title: "葬送のフリーレン")
-        ],
-        episodes: 28,
-        score: 9.3,
-        images: AnimeImages(jpg: AnimeImage(imageUrl: nil, largeImageUrl: nil)),
-        broadcast: Broadcast(day: "Fridays", time: "23:00", timezone: "Asia/Tokyo"),
-        genres: [Genre(malId: 1, name: "Adventure"), Genre(malId: 2, name: "Drama")],
-        studios: [Studio(malId: 1, name: "Madhouse")],
-        synopsis: nil,
-        aired: AiredDate(from: "2023-09-29T00:00:00+00:00", to: nil),
-        duration: "24 min per ep",
-        airing: false,
-        type: "TV",
-        year: 2023
+        id: 209867,
+        name: "葬送的芙莉莲",
+        originalName: "葬送のフリーレン",
+        overview: "打倒魔王的勇者一行人，踏上了回归故乡的旅程……",
+        posterPath: nil,
+        backdropPath: nil,
+        voteAverage: 8.7,
+        firstAirDate: "2023-09-29",
+        genreIds: [16],
+        genres: [TMDBGenre(id: 16, name: "动画")],
+        status: "Ended",
+        inProduction: false,
+        numberOfEpisodes: 28,
+        numberOfSeasons: 1,
+        nextEpisodeToAir: nil,
+        lastEpisodeToAir: TMDBEpisode(id: 1, episodeNumber: 28, seasonNumber: 1, airDate: "2024-03-22"),
+        networks: [TMDBNetwork(id: 1, name: "NTV", logoPath: nil)],
+        productionCompanies: [TMDBProductionCompany(id: 1, name: "Madhouse")],
+        episodeRunTime: [24]
     ))
     .padding()
 }

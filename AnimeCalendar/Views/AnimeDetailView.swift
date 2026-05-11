@@ -24,8 +24,7 @@ struct AnimeDetailView: View {
 
                     if isLoadingDetail && fullAnime == nil {
                         HStack {
-                            ProgressView()
-                                .padding(.trailing, 6)
+                            ProgressView().padding(.trailing, 6)
                             Text("加载详情中...")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -34,8 +33,12 @@ struct AnimeDetailView: View {
                         .padding(.vertical, 8)
                     }
 
-                    if let studios = displayAnime.studios, !studios.isEmpty {
-                        studiosRow(studios: studios)
+                    if let net = displayAnime.networkNames {
+                        infoCard(icon: "play.tv", title: "播出平台", content: net)
+                    }
+
+                    if let studio = displayAnime.studioNames {
+                        infoCard(icon: "building.2", title: "制作公司", content: studio)
                     }
 
                     if let synopsis = displayAnime.cleanSynopsis, !synopsis.isEmpty {
@@ -51,7 +54,7 @@ struct AnimeDetailView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .task {
             isLoadingDetail = true
-            fullAnime = try? await JikanService.shared.fetchAnimeDetail(id: anime.malId)
+            fullAnime = try? await TMDBService.shared.fetchShowDetail(id: anime.id)
             isLoadingDetail = false
         }
     }
@@ -61,13 +64,10 @@ struct AnimeDetailView: View {
     @ViewBuilder
     private var heroSection: some View {
         ZStack(alignment: .bottomLeading) {
-            // 背景图片
             AsyncImage(url: displayAnime.largeThumbnailURL ?? displayAnime.thumbnailURL) { phase in
                 switch phase {
                 case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
+                    image.resizable().aspectRatio(contentMode: .fill)
                 case .failure:
                     Rectangle()
                         .fill(Color(.systemGray4))
@@ -86,7 +86,6 @@ struct AnimeDetailView: View {
             .frame(height: 420)
             .clipped()
 
-            // 渐变遮罩
             LinearGradient(
                 gradient: Gradient(stops: [
                     .init(color: .clear, location: 0.0),
@@ -100,44 +99,40 @@ struct AnimeDetailView: View {
             .frame(maxWidth: .infinity)
             .frame(height: 420)
 
-            // 文字信息叠层
             VStack(alignment: .leading, spacing: 6) {
                 Text(displayAnime.displayTitle)
                     .font(.system(size: 28, weight: .bold))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
 
-                if let japanese = displayAnime.titleJapanese, !japanese.isEmpty {
+                if let japanese = displayAnime.titleJapanese,
+                   !japanese.isEmpty, japanese != displayAnime.displayTitle {
                     Text(japanese)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
 
-                // 年份 · 类型 · 状态
                 HStack(spacing: 5) {
                     if let year = displayAnime.year {
                         Text("\(String(year))年")
                     }
-                    if let type = displayAnime.type, !type.isEmpty {
-                        Text("·")
-                        Text(type)
-                    }
+                    Text("·")
                     if displayAnime.airing == true {
-                        Text("·")
-                        Text("连载中")
-                            .foregroundStyle(.green)
+                        Text("连载中").foregroundStyle(.green)
                     } else {
-                        Text("·")
                         Text("已完结")
+                    }
+                    if let seasons = displayAnime.numberOfSeasons, seasons > 1 {
+                        Text("·")
+                        Text("\(seasons) 季")
                     }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-                // 类型标签
-                if let genres = displayAnime.genres, !genres.isEmpty {
-                    Text(genres.prefix(4).map(\.name).joined(separator: "，"))
+                if !displayAnime.genreNames.isEmpty {
+                    Text(displayAnime.genreNames.prefix(4).joined(separator: "，"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -152,10 +147,10 @@ struct AnimeDetailView: View {
     @ViewBuilder
     private var actionButtonsRow: some View {
         HStack(spacing: 0) {
-            circleActionButton(icon: "safari", label: "探索")
-            circleActionButton(icon: "square.and.arrow.up", label: "分享")
-            circleActionButton(icon: "heart", label: "收藏")
-            circleActionButton(icon: "ellipsis", label: "更多")
+            circleActionButton(icon: "safari",                label: "探索")
+            circleActionButton(icon: "square.and.arrow.up",   label: "分享")
+            circleActionButton(icon: "heart",                 label: "收藏")
+            circleActionButton(icon: "ellipsis",              label: "更多")
         }
         .padding(.top, 4)
     }
@@ -185,40 +180,42 @@ struct AnimeDetailView: View {
         HStack(spacing: 12) {
             if let score = displayAnime.score, score > 0 {
                 AnimeStatCard(
-                    icon: "star.fill",
-                    iconColor: .blue,
+                    icon: "star.fill", iconColor: .blue,
                     value: String(format: "%.1f", score),
-                    label: "MAL 评分"
+                    label: "TMDB 评分"
                 )
             }
 
             AnimeStatCard(
-                icon: "play.rectangle.fill",
-                iconColor: .blue,
+                icon: "play.rectangle.fill", iconColor: .blue,
                 value: displayAnime.episodeShortDisplay,
                 label: displayAnime.episodeShortLabel
             )
 
-            let time = displayAnime.localBroadcastTime
-            if time != "时间未知" {
+            // 优先显示下集日期，其次时长
+            if let nextDate = displayAnime.nextEpisodeDateText {
                 AnimeStatCard(
-                    icon: "clock.fill",
-                    iconColor: .blue,
-                    value: time,
-                    label: "播出时间"
+                    icon: "calendar.badge.clock", iconColor: .blue,
+                    value: nextDate,
+                    label: "下集播出"
+                )
+            } else if let duration = displayAnime.durationText {
+                AnimeStatCard(
+                    icon: "clock.fill", iconColor: .blue,
+                    value: duration,
+                    label: "每集时长"
                 )
             }
         }
     }
 
-    // MARK: - Studios
+    // MARK: - Info Cards
 
     @ViewBuilder
-    private func studiosRow(studios: [Studio]) -> some View {
+    private func infoCard(icon: String, title: String, content: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("制作公司", systemImage: "building.2")
-                .font(.headline)
-            Text(studios.map(\.name).joined(separator: "  ·  "))
+            Label(title, systemImage: icon).font(.headline)
+            Text(content)
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -227,13 +224,10 @@ struct AnimeDetailView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
 
-    // MARK: - Synopsis
-
     @ViewBuilder
     private func synopsisCard(synopsis: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("简介")
-                .font(.headline)
+            Text("简介").font(.headline)
             Text(synopsis)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -277,22 +271,25 @@ struct AnimeStatCard: View {
 #Preview {
     NavigationStack {
         AnimeDetailView(anime: Anime(
-            malId: 52991,
-            title: "Sousou no Frieren",
-            titleJapanese: "葬送のフリーレン",
-            titles: [AnimeTitle(type: "English", title: "Frieren: Beyond Journey's End")],
-            episodes: 28,
-            score: 9.3,
-            images: AnimeImages(jpg: AnimeImage(imageUrl: nil, largeImageUrl: nil)),
-            broadcast: Broadcast(day: "Fridays", time: "23:00", timezone: "Asia/Tokyo"),
-            genres: [Genre(malId: 1, name: "Adventure"), Genre(malId: 2, name: "Drama")],
-            studios: [Studio(malId: 1, name: "Madhouse")],
-            synopsis: "After the party of heroes defeated the Demon King, they finally return to their hometown.",
-            aired: AiredDate(from: "2023-09-29T00:00:00+00:00", to: "2024-03-22T00:00:00+00:00"),
-            duration: "24 min per ep",
-            airing: false,
-            type: "TV",
-            year: 2023
+            id: 209867,
+            name: "葬送的芙莉莲",
+            originalName: "葬送のフリーレン",
+            overview: "打倒魔王的勇者一行人，踏上了回归故乡的旅程。在旅途中精灵魔法师芙莉莲和勇者辉美，在旅程终点的王都里，和彼此相知相惜",
+            posterPath: nil,
+            backdropPath: nil,
+            voteAverage: 8.7,
+            firstAirDate: "2023-09-29",
+            genreIds: nil,
+            genres: [TMDBGenre(id: 16, name: "动画"), TMDBGenre(id: 18, name: "剧情")],
+            status: "Ended",
+            inProduction: false,
+            numberOfEpisodes: 28,
+            numberOfSeasons: 1,
+            nextEpisodeToAir: nil,
+            lastEpisodeToAir: TMDBEpisode(id: 1, episodeNumber: 28, seasonNumber: 1, airDate: "2024-03-22"),
+            networks: [TMDBNetwork(id: 1, name: "NTV", logoPath: nil)],
+            productionCompanies: [TMDBProductionCompany(id: 1, name: "Madhouse")],
+            episodeRunTime: [24]
         ))
     }
 }
