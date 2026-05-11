@@ -8,13 +8,13 @@ import Observation
 
 @Observable
 class ScheduleViewModel {
-    /// Cache keyed by the start-of-day Date
     private(set) var dailyCache: [Date: [AiringEntry]] = [:]
+    /// Keyed by AniList media ID → TMDB zh-CN title + synopsis
+    private(set) var chineseCache: [Int: TMDBService.ShowInfo] = [:]
 
     var isLoading = false
     var errorMessage: String?
 
-    /// Which weekday indices (0=Mon…6=Sun) have at least one cached entry
     var daysWithAnime: Set<Int> {
         var result = Set<Int>()
         for (date, entries) in dailyCache where !entries.isEmpty {
@@ -34,31 +34,63 @@ class ScheduleViewModel {
         dailyCache[startOfDay(date)] != nil
     }
 
-    /// Load schedule for `date`, skipping if already cached.
+    func chineseTitle(for entry: AiringEntry) -> String {
+        chineseCache[entry.media.id]?.name ?? entry.media.displayTitle
+    }
+
+    func chineseSynopsis(for mediaId: Int, fallback: String?) -> String? {
+        chineseCache[mediaId]?.overview ?? fallback
+    }
+
+    // MARK: - Loading
+
     func loadDay(_ date: Date) async {
         let key = startOfDay(date)
         guard dailyCache[key] == nil else { return }
         isLoading = true
         errorMessage = nil
         do {
-            let entries = try await AniListService.shared.fetchSchedule(for: date)
-            dailyCache[key] = entries
+            let fetched = try await AniListService.shared.fetchSchedule(for: date)
+            dailyCache[key] = fetched
+            isLoading = false
+            // Background: fetch TMDB Chinese data for entries that have a TMDB ID
+            Task { await fetchChineseData(for: fetched) }
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription
                 ?? error.localizedDescription
             dailyCache[key] = []
+            isLoading = false
         }
-        isLoading = false
     }
 
-    /// Force-refresh `date` even if already cached.
     func forceReload(_ date: Date) async {
         let key = startOfDay(date)
         dailyCache.removeValue(forKey: key)
         await loadDay(date)
     }
 
-    // MARK: - Helpers
+    // MARK: - Private
+
+    private func fetchChineseData(for entries: [AiringEntry]) async {
+        let needsFetch = entries.filter {
+            chineseCache[$0.media.id] == nil && $0.media.tmdbId != nil
+        }
+        guard !needsFetch.isEmpty else { return }
+
+        await withTaskGroup(of: (Int, TMDBService.ShowInfo?).self) { group in
+            for entry in needsFetch {
+                guard let tmdbId = entry.media.tmdbId else { continue }
+                let mediaId = entry.media.id
+                group.addTask {
+                    let info = try? await TMDBService.shared.fetchChineseInfo(id: tmdbId)
+                    return (mediaId, info)
+                }
+            }
+            for await (mediaId, info) in group {
+                if let info { chineseCache[mediaId] = info }
+            }
+        }
+    }
 
     func todayIndex() -> Int {
         let wd = Calendar.current.component(.weekday, from: Date())

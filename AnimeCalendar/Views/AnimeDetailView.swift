@@ -7,11 +7,23 @@ import SwiftUI
 
 struct AnimeDetailView: View {
     let entry: AiringEntry
+    var viewModel: ScheduleViewModel?
 
     @State private var fullMedia: AniListMedia?
+    @State private var chineseInfo: TMDBService.ShowInfo?
     @State private var isLoadingDetail = false
 
     private var media: AniListMedia { fullMedia ?? entry.media }
+    private var chineseTitle: String {
+        chineseInfo?.name
+            ?? viewModel?.chineseCache[entry.media.id]?.name
+            ?? media.displayTitle
+    }
+    private var chineseSynopsis: String? {
+        chineseInfo?.overview
+            ?? viewModel?.chineseCache[entry.media.id]?.overview
+            ?? media.cleanSynopsis
+    }
 
     var body: some View {
         ScrollView {
@@ -37,7 +49,7 @@ struct AnimeDetailView: View {
                         infoCard(icon: "building.2", title: "制作公司", content: studio)
                     }
 
-                    if let synopsis = media.cleanSynopsis, !synopsis.isEmpty {
+                    if let synopsis = chineseSynopsis, !synopsis.isEmpty {
                         synopsisCard(synopsis: synopsis)
                     }
                 }
@@ -50,7 +62,12 @@ struct AnimeDetailView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .task {
             isLoadingDetail = true
-            fullMedia = try? await AniListService.shared.fetchMediaDetail(id: entry.media.id)
+            let detail = try? await AniListService.shared.fetchMediaDetail(id: entry.media.id)
+            fullMedia = detail
+            let tmdbId = detail?.tmdbId ?? entry.media.tmdbId
+            if let tmdbId {
+                chineseInfo = try? await TMDBService.shared.fetchChineseInfo(id: tmdbId)
+            }
             isLoadingDetail = false
         }
     }
@@ -98,13 +115,13 @@ struct AnimeDetailView: View {
             .frame(height: 420)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(media.displayTitle)
+                Text(chineseTitle)
                     .font(.system(size: 28, weight: .bold))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
 
                 if let native = media.nativeTitle,
-                   !native.isEmpty, native != media.displayTitle {
+                   !native.isEmpty, native != chineseTitle {
                     Text(native)
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -290,7 +307,8 @@ struct AnimeStatCard: View {
                 synonyms: ["葬送的芙莉莲"],
                 isAdult: false,
                 studios: AniListStudios(nodes: [AniListStudio(name: "Madhouse")]),
-                nextAiringEpisode: nil
+                nextAiringEpisode: nil,
+                externalLinks: nil
             )
         ))
     }

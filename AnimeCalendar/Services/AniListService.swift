@@ -64,6 +64,7 @@ actor AniListService {
                 isAdult
                 studios(isMain: true) { nodes { name } }
                 nextAiringEpisode { episode airingAt }
+                externalLinks { site siteId url }
               }
             }
           }
@@ -107,6 +108,7 @@ actor AniListService {
               isAdult
               studios(isMain: true) { nodes { name } }
               nextAiringEpisode { episode airingAt }
+              externalLinks { site siteId url }
             }
           }
         }

@@ -25,6 +25,12 @@ struct AiringEntry: Codable, Identifiable {
 
 // MARK: - Media
 
+struct AniListExternalLink: Codable {
+    let site: String?
+    let siteId: Int?
+    let url: String?
+}
+
 struct AniListMedia: Codable, Identifiable {
     let id: Int
     let title: AniListTitle
@@ -40,6 +46,22 @@ struct AniListMedia: Codable, Identifiable {
     let isAdult: Bool?
     let studios: AniListStudios?
     let nextAiringEpisode: AniListNextAiring?
+    let externalLinks: [AniListExternalLink]?
+
+    var tmdbId: Int? {
+        if let link = externalLinks?.first(where: {
+            let s = ($0.site ?? "").lowercased()
+            return s == "themoviedb" || s == "tmdb"
+        }), let id = link.siteId { return id }
+        for link in externalLinks ?? [] {
+            guard let url = link.url, url.contains("themoviedb.org/tv/") else { continue }
+            let parts = url.components(separatedBy: "/tv/")
+            if let tail = parts.last, let id = Int(tail.components(separatedBy: "/").first ?? "") {
+                return id
+            }
+        }
+        return nil
+    }
 
     var displayTitle: String {
         if let cn = chineseTitle { return cn }

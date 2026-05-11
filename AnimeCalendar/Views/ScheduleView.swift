@@ -116,10 +116,13 @@ struct ScheduleView: View {
     private var animeListRows: some View {
         VStack(spacing: 0) {
             ForEach(entryList) { entry in
-                NavigationLink(destination: AnimeDetailView(entry: entry)) {
-                    AnimeRowView(entry: entry)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 2)
+                NavigationLink(destination: AnimeDetailView(entry: entry, viewModel: viewModel)) {
+                    AnimeRowView(
+                        entry: entry,
+                        chineseTitle: viewModel.chineseCache[entry.media.id]?.name
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 2)
                 }
                 .buttonStyle(.plain)
 

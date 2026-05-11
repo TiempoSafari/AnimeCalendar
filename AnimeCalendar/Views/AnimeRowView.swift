@@ -7,8 +7,11 @@ import SwiftUI
 
 struct AnimeRowView: View {
     let entry: AiringEntry
+    /// TMDB zh-CN title override; falls back to AniList displayTitle when nil
+    var chineseTitle: String?
 
     private var media: AniListMedia { entry.media }
+    private var title: String { chineseTitle ?? media.displayTitle }
 
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
@@ -50,13 +53,13 @@ struct AnimeRowView: View {
 
             // 信息区
             VStack(alignment: .leading, spacing: 4) {
-                Text(media.displayTitle)
+                Text(title)
                     .font(.headline)
                     .lineLimit(2)
                     .foregroundStyle(.primary)
 
                 if let native = media.nativeTitle,
-                   !native.isEmpty, native != media.displayTitle {
+                   !native.isEmpty, native != title {
                     Text(native)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -84,26 +87,30 @@ struct AnimeRowView: View {
 }
 
 #Preview {
-    AnimeRowView(entry: AiringEntry(
-        id: 1,
-        airingAt: Int(Date().timeIntervalSince1970),
-        episode: 5,
-        media: AniListMedia(
-            id: 21,
-            title: AniListTitle(romaji: "Frieren", native: "葬送のフリーレン", english: nil),
-            description: "A fantasy anime about an elf mage.",
-            coverImage: AniListCoverImage(large: nil, medium: nil),
-            bannerImage: nil,
-            episodes: 28,
-            status: "FINISHED",
-            genres: ["Adventure", "Drama"],
-            averageScore: 87,
-            seasonYear: 2023,
-            synonyms: ["葬送的芙莉莲"],
-            isAdult: false,
-            studios: AniListStudios(nodes: [AniListStudio(name: "Madhouse")]),
-            nextAiringEpisode: nil
-        )
-    ))
+    AnimeRowView(
+        entry: AiringEntry(
+            id: 1,
+            airingAt: Int(Date().timeIntervalSince1970),
+            episode: 5,
+            media: AniListMedia(
+                id: 21,
+                title: AniListTitle(romaji: "Frieren", native: "葬送のフリーレン", english: nil),
+                description: "A fantasy anime about an elf mage.",
+                coverImage: AniListCoverImage(large: nil, medium: nil),
+                bannerImage: nil,
+                episodes: 28,
+                status: "FINISHED",
+                genres: ["Adventure", "Drama"],
+                averageScore: 87,
+                seasonYear: 2023,
+                synonyms: nil,
+                isAdult: false,
+                studios: AniListStudios(nodes: [AniListStudio(name: "Madhouse")]),
+                nextAiringEpisode: nil,
+                externalLinks: nil
+            )
+        ),
+        chineseTitle: "葬送的芙莉莲"
+    )
     .padding()
 }
